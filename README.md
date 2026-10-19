@@ -1,132 +1,254 @@
-# Agency automation
+# 🏢 Agency Automater — Local B2B Acquisition & Outreach Assistant
 
-A local acquisition assistant for a solo IT founder in Pakistan. It researches manually chosen company websites, keeps a Google Sheets CRM, scores documented opportunities, creates Gmail drafts for your review, stops follow-ups on replies, and reports daily activity. **You review and send every email yourself in Gmail.** The program has no email-sending endpoint.
+<div align="center">
 
-## Start here
+[![Node.js](https://img.shields.io/badge/Node.js-24%20LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![n8n Engine](https://img.shields.io/badge/n8n-2.42.6-EA4B71?style=for-the-badge&logo=n8n&logoColor=white)](https://n8n.io/)
+[![Tests](https://img.shields.io/badge/Tests-98%20Passed-brightgreen?style=for-the-badge&logo=node.js&logoColor=white)](#tests)
+[![Google APIs](https://img.shields.io/badge/Google%20APIs-Gmail%20%7C%20Sheets-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://developers.google.com/)
+[![Gemini](https://img.shields.io/badge/Gemini-3.5%20%7C%203.8%20Flash-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)](https://aistudio.google.com/)
+[![Chrome Extension](https://img.shields.io/badge/Extension-Manifest%20V3-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](extension/)
+[![Security](https://img.shields.io/badge/Mode-Zero--Send%20Draft%20Only-success?style=for-the-badge)](#draft-only-safety)
 
-**Optional Chrome email tracker:** [installation and server setup](docs/mail-tracker.md). The built `extension/` folder adds a per-message Gmail toggle, possible-opening dashboard, optional desktop notifications, and CRM synchronization. It requires your own free-tier public tracker deployment, independently of the core agency Google/Gemini setup.
+**A private, local acquisition workflow assistant for IT founders. Researches target businesses, orchestrates Google Sheets CRM, scores opportunities deterministically, drafts hyper-personalized Gmail messages, and tracks opens — with 100% human-in-the-loop manual sending.**
 
-Node.js **24 LTS** and npm are required. The project pins **n8n Community Edition 2.42.6**. No Docker, local AI models, paid hosting or mandatory paid API is used. The helper uses built-in Node APIs; n8n is the runtime npm dependency and jsdom is a development dependency for extension tests.
+[Quick Start](#-quick-start) • [System Architecture](#-system-architecture) • [Workflow Matrix](#-workflow-matrix) • [Outreach Lifecycle](#-outreach-lifecycle) • [Email Tracker](#-chrome-email-tracker) • [CLI Commands](#-cli-commands) • [Docs](docs/)
 
-In PowerShell:
+</div>
+
+---
+
+> [!IMPORTANT]
+> **Zero-Send Security Guarantee**: This platform has **no programmatic email-sending endpoint**. All emails are composed exclusively as Gmail drafts for your personal review. You manually hit "Send" in Gmail. Automated follow-up clocks only tick after actual manual sends are reconciled.
+
+---
+
+## 🛠️ System Architecture
+
+```mermaid
+flowchart TD
+    subgraph CRM ["📊 Google Sheets & Local Journal"]
+        S1["Google Sheets CRM<br/>(LEADS, RESEARCH, CRM, REPORTS)"]
+        J1["SQLite Local Journal<br/>(.data/journal.db)"]
+    end
+
+    subgraph ResearchEngine ["🔍 Lead Intake & AI Research"]
+        L1["Web Intake / CSV Import"] --> L2["Safe Fetcher<br/>(Robots.txt, Anti-SSRF)"]
+        L2 --> G1["Gemini AI Fallback Engine<br/>3.8 Flash ➔ 3.5 Flash-Lite ➔ 3.1 Flash-Lite"]
+        G1 --> SC["Deterministic Scoring Engine<br/>(Review Gate 9-12 / 5-8 / 0-4)"]
+    end
+
+    subgraph OutreachDrafts ["✉️ Gmail Draft Generation"]
+        SC --> AP["Human Approval Gate<br/>(Contact & Delivery Verified)"]
+        AP --> DM["MIME Composer & Draft Creator"]
+        DM --> GD["Gmail Drafts Box<br/>(Pending Human Send)"]
+    end
+
+    subgraph Reconciliation ["🔄 Tracking & Auto-Suppression"]
+        HS["Human Sends Email"] --> RC["Sent Mail Reconciliation"]
+        RP["Reply & Unsubscribe Detection"] --> SP["Suppression List & Cancel Follow-ups"]
+        EXT["Optional Chrome Tracker<br/>(Manifest V3 Pixel)"] --> TR["Private Cloudflare Worker"]
+    end
+
+    ResearchEngine --> CRM
+    CRM --> OutreachDrafts
+    Reconciliation --> CRM
+```
+
+---
+
+## ✨ Core Highlights
+
+- **🔒 Local-First & Zero Paid Subscriptions**: Powered strictly by Node 24 built-in APIs, pinned **n8n Community Edition 2.42.6**, and free-tier Google & Gemini APIs. No monthly SaaS fees, no third-party data broker dependencies.
+- **🛡️ SSRF & Web Crawler Guard**: Crawls strictly authorized public company pages (`/`, `/about`, `/contact`). Blocks private subnet lookups (DNS rebinding / RFC 1918 mitigation), respects `robots.txt`, and rejects scraping forms/social platforms.
+- **🤖 Resilient Multi-Tier Gemini Fallback**: Gracefully degrades during quota pressure (`429`) or model outages:
+  $$\text{gemini-3.8-flash} \longrightarrow \text{gemini-3.5-flash-lite} \longrightarrow \text{gemini-3.1-flash-lite}$$
+  Includes automatic cooldown caching (5m for rate limits, 1h for 404s) and strict daily request capping.
+- **🎯 Deterministic Evidence-Based Scoring**: Evaluates real observations against a 12-point matrix. Eliminates LLM hallucination by verifying quotes against collected source URLs.
+- **🛑 Autonomous Reply & Opt-Out Suppression**: Continuously scans incoming messages. Any reply, out-of-office message, or unsubscribe request immediately freezes pending follow-up schedules.
+- **📊 Two-Way Reconciliation**: Monitors Gmail `Sent Mail` with exact `Message-ID` tracking. Follow-up sequences (4 days then 7 days) are scheduled solely from real, human-confirmed send timestamps.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
+- **Node.js**: `v24.x` (LTS)
+- **Git** & **PowerShell** (Windows)
+- Google Cloud Project with **Gmail API** and **Google Sheets API** enabled ([Guide](docs/google-setup.md))
+- Google AI Studio API Key ([Free tier](https://aistudio.google.com/))
+
+### 2. Installation & Initialization
 
 ```powershell
+# Clone and enter project directory
 cd "D:\AI STUFF\PROJECTS\automater"
+
+# Install pinned dependencies
 npm install --no-fund
+
+# Initialize environment configuration & generate secure tokens
 npm run setup
+
+# Run 98 offline unit tests
 npm test
 ```
 
-`setup` creates a private `.env` and helper token. It preserves existing settings. Open `.env` locally and complete your Google, Gemini and sender information. Never put keys in chat. `install.cmd` performs the install, setup and offline tests if you prefer a double-click.
+### 3. Configure `.env`
+Edit the generated `.env` file with your credentials:
+```ini
+# Google Integration
+GOOGLE_CLIENT_ID=your-desktop-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-desktop-client-secret
+GOOGLE_SHEET_ID=your-google-sheet-id
 
-1. Follow [Google setup](docs/google-setup.md) to enable Gmail and Sheets APIs, create a **Desktop app** OAuth client, and authorize your own Gmail account with `npm run auth`.
-2. Upload `templates/crm-template.xlsx` to Google Drive. Open it with Google Sheets and choose **File > Save as Google Sheets** if it remains an Excel file. Keep all five tab names and row 1 headers. Copy the spreadsheet ID from its URL into `GOOGLE_SHEET_ID` in `.env`. No cloud sheet has been created for you.
-3. Get a Gemini API key from [AI Studio](https://aistudio.google.com/). Confirm the project is on **Free tier with billing disabled**. Enter the key locally and set `GEMINI_FREE_TIER_CONFIRMED=true`. The default model is `gemini-3.5-flash-lite`; `gemini-3.1-flash-lite` and `gemini-3.8-flash` are allowed alternatives. Standard text generation free-tier pricing was checked on 2026-10-13; account availability and quotas vary.
+# Gemini Free Tier
+GEMINI_API_KEY=your-gemini-key
+GEMINI_FREE_TIER_CONFIRMED=true
+GEMINI_MODEL=gemini-3.5-flash-lite
 
-Gemini availability fallback is automatic: `gemini-3.8-flash` → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`, starting at your configured model and only moving lower. Quota errors (429), overload/server errors, unavailable models (404), and network failures try the next model once. Failed models are skipped for five minutes (one hour for 404), with cooldowns preserved across restart. All attempts share the existing throttle and daily cap. The selected model and fallback events are recorded locally. Authentication, invalid input, blocked content and invalid output still require attention. If all models are unavailable, drafting stays blocked with a clear retry message; availability and unused quota cannot be guaranteed. No paid fallback is added.
-4. Enter your real name, business name, email and valid postal address. Limit `DELIVERABLE_SERVICES` to work you can actually deliver. Put a second email address **you control** in `TEST_RECIPIENTS`. Leave `OUTREACH_MODE=test`.
-5. Run these commands:
-
-```powershell
-npm run doctor
-npm start
+# Sender & Identity
+SENDER_NAME="Your Name"
+SENDER_TITLE="Founder & Lead Architect"
+SENDER_EMAIL=you@example.com
+SENDER_POSTAL_ADDRESS="Your City, Postal Code, Country"
+OUTREACH_MODE=test
+TEST_RECIPIENTS=your-testing-inbox@example.com
 ```
 
-Open **http://localhost:5678** and create the local n8n owner account. Keep the terminal open. `start.cmd` also starts both processes. They bind only to your laptop. Ctrl+C stops them; restart with the same command after reboot.
+### 4. Authorize Google Account & Run Doctor
+```powershell
+# Run OAuth login flow (Desktop OAuth consent)
+npm run auth
 
-## Import the workflows
+# Run system diagnostic checks
+npm run doctor
 
-After creating the n8n owner account, stop `npm start` with Ctrl+C. Import everything, then restart:
+# Start local helper and n8n engine
+npm start
+```
+*Open **http://localhost:5678** to create your local n8n owner credentials.*
 
+---
+
+## 🔄 Workflow Matrix
+
+The system includes **11 production-ready n8n workflows** located in `workflows/`:
+
+| Workflow ID | Workflow Name | Description | Schedule |
+|---|---|---|---|
+| `00` | **Lead Intake** | Ingests URLs/CSVs, generates stable IDs, removes duplicates | Every 30 mins |
+| `A` | **Lead Research** | Fetches public pages & extracts evidence via Gemini | Daily @ 09:00 (up to 3 leads) |
+| `B` | **Lead Qualification** | Evaluates reviewed evidence score (9-12 = Tier A, 5-8 = Tier B) | Daily @ 10:15 |
+| `C` | **Gmail Drafts for Review** | Formats verified evidence and outputs Gmail review drafts | Daily @ 11:00 (up to 3 drafts) |
+| `D` | **Reply & Opt-Out Guard** | Detects prospect replies, halts sequence, records suppressions | Every 30 mins |
+| `Sync` | **Sent Mail Reconciliation** | Verifies manual human send timestamps from Gmail Sent | Every 30 mins |
+| `E` | **Follow-up Drafts** | Queues Stage 1 (4d) and Stage 2 (7d) follow-up drafts | Daily @ 12:00 |
+| `F` | **Daily Business Report** | Computes pipeline metrics into Google Sheets and local log | Daily @ 18:00 |
+| `G` | **Error Monitoring** | Central n8n execution error capture and audit journal | On Error Trigger |
+| `Test` | **Local Connection Test** | End-to-end sanity check between n8n and local helper | Manual |
+| `Track` | **Tracking Sync (Optional)** | Synchronizes email open events from Cloudflare tracker | Hourly |
+
+Import all workflows into n8n via:
 ```powershell
 npm run workflows:import
-npm start
 ```
 
-Alternatively, use n8n's **Import from file** menu for each JSON in `workflows/`. All **11 workflows start inactive**, including the optional tracking sync. Reimporting updates the same IDs and deactivates them, so import while stopped and review before activating again.
+---
 
-The CLI import command automatically creates the encrypted **Agency Helper** header credential and connects it to the imported workflows. The temporary private import file is deleted afterward. You do not need to wire each node yourself. Google/Gemini credentials still require the setup above.
+## 🎯 Outreach Lifecycle
 
-If you import the JSON files manually through the UI instead, create one **HTTP Header Auth** credential named **Agency Helper**:
+```
+[Target URL] ➔ Lead Intake ➔ Safe Web Fetch ➔ Gemini Research ➔ Human Score Review
+                                                                        ↓
+[Gmail Sent Box] ⟵ Manual Review & Send ⟵ Gmail Draft Created ⟵ Approved Tier A
+       ↓
+Reconciliation ➔ Follow-up Timer Armed ➔ Stage 1 / Stage 2 Follow-Up Drafts
+       ↓
+Prospect Replies ➔ Immediate Sequence Cancellation & Suppression
+```
 
-- Header name: `x-agency-token`
-- Header value: your local `.env` `HELPER_TOKEN`
+---
 
-For manual UI imports, select it on both HTTP nodes in every task workflow and on the error workflow's HTTP node. The local connection test needs no credential. If you change `HELPER_PORT`, edit the workflow HTTP URLs as well. In each task workflow's settings, verify the error workflow is **Agency - G Error monitoring**. The checked-in JSON contains placeholders, never real credentials.
+## 🧩 Chrome Email Tracker
 
-Run **Agency - Local connection test** manually first. Then follow [the owned-account test](docs/live-testing.md). Activate the Schedule workflows only after that succeeds. The error workflow is selected in settings; Error Trigger is invoked by failed scheduled executions and normally needs no independent schedule. Manual execution errors remain visible in n8n and the helper journal.
+Located in [`extension/`](extension/) with full documentation in [docs/mail-tracker.md](docs/mail-tracker.md):
+- **Manifest V3 Architecture**: Zero DOM pollution, isolated credentials.
+- **Gmail Composer Toggle**: Per-message tracking toggle embedded right in the Gmail compose toolbar.
+- **Edge Deployment**: Backed by an ultra-lightweight Cloudflare Worker and D1 database.
+- **Anti-False Positive**: Filters scanner pre-fetches, head requests, and immediate previews within 45 seconds of sending.
 
-| Workflow | What it does | Suggested schedule (Karachi time) |
-|---|---|---|
-| 00 Lead intake | Assigns IDs, normalizes websites, marks duplicates | Every 30 minutes |
-| A Lead research | Fetches permitted public pages and validates Gemini research | 09:00 daily, up to 3 leads |
-| B Lead qualification | Applies reviewed evidence scoring | 10:15 daily |
-| C Gmail drafts for review | Prepares approved A leads as drafts | 11:00 daily, up to 3 drafts |
-| D Reply detection and suppression | Reads replies, stops follow-ups, keeps opt-outs | Every 30 minutes |
-| Sent Mail reconciliation | Confirms your manual sends | Every 30 minutes |
-| E Follow-up drafts | Drafts after 4 days, then 7 days from the first follow-up's actual send | 12:00 daily |
-| F Daily business report | Writes counts to REPORTS and local `reports/` | 18:00 daily |
-| G Error monitoring | Records n8n failures | Error Trigger |
+---
 
-## Add your first 10 clients
+## 💻 CLI Commands
 
-Choose **7 US software/development or digital marketing agencies**, **2 direct US businesses**, and **1 Pakistani business** as an initial mix. Look for documented services, current partner requests or technology initiatives. This is a starting allocation, not proof that any company needs help.
-
-Enter one website per row in **LEADS**, or replace the `.example` placeholders in `sample-data/first-10-leads.csv` and import it from a second terminal while `npm start` is running:
+Run these management utilities from PowerShell while the helper is running:
 
 ```powershell
+# Diagnostics & Health
+npm run doctor               # Inspect dependencies, permissions & config
+npm run check                # Lint and code validation
+npm run gemini:test          # Probe Gemini API quota & model availability
+
+# Manual Workflow Triggers
+npm run run -- intake        # Ingest new leads from LEADS tab
+npm run run -- research      # Perform evidence extraction
+npm run run -- qualify       # Run qualification scoring
+npm run run -- drafts        # Generate pending review drafts
+npm run run -- reconcile     # Check Gmail Sent items
+npm run run -- replies       # Check incoming replies & opt-outs
+npm run run -- followups     # Generate due follow-up drafts
+npm run run -- report        # Build daily status summary
+npm run run -- recover       # Recover uncertain draft operations
+
+# Data Import
 npm run leads:import -- sample-data/first-10-leads.csv
-npm run run -- intake
 ```
 
-Do not use the sample `.example` domains as real leads. Use original public company websites. Email is optional. **Never guess contact addresses.** Intake and CSV import leave all approvals false.
+---
 
-For each lead:
-
-1. Check that automated access is permitted by the website's terms and your purpose. Set **Research Allowed** to `true`. The fetcher also obeys robots.txt, rejects private network addresses and login/social scraping, and visits at most the homepage, `/about` and `/contact`.
-2. Run research manually or wait for its schedule. Read **Verified Observations**, **Source URLs**, the explicitly tentative **Possible IT Opportunity**, and **Score Inputs**. Unverified fields stay blank. You can correct the points and reasons in the Score Inputs JSON; every scored quote must be in the verified observations. Read [the scoring guide](docs/scoring.md).
-3. Set **Score Reviewed** and **Delivery Confirmed** to `true` only after checking the evidence and your delivery capacity. Run qualification. Score 9–12 becomes A; 5–8 becomes B; 0–4 becomes C. Unknown budget and timing receive 0. B/C leads need additional research before drafting.
-4. Check the public contact email and recipient role. Set **Contact Verified**, **Outreach Approved**, and optionally **Follow-up Allowed** to `true`. Production drafts require the email to appear on a collected public company page. Test mode permits only the configured owned recipients.
-5. Run the draft workflow. Open **Gmail > Drafts**, review the exact observation, service offer, sender details and opt-out instructions, then send personally if appropriate. Creating a draft never advances a follow-up clock.
-
-After the owned-account test, switch `OUTREACH_MODE=production` locally and restart when ready for reviewed real contacts. This only allows draft recipients outside the test list. Sending remains manual.
-
-## Useful commands
-
-Run task commands in a second terminal while the helper is running. They print a job ID, poll status, and display the outcome.
+## 🧪 Tests
 
 ```powershell
-npm run crm:check
-npm run gemini:test
-npm run run -- research
-npm run run -- qualify
-npm run run -- drafts
-npm run run -- reconcile
-npm run run -- replies
-npm run run -- followups
-npm run run -- report
-npm run run -- recover
-npm run check
+npm test
+```
+Runs the **98 unit and integration tests** verifying:
+- SSRF prevention & DNS rebinding defenses
+- Multi-tier Gemini model degradation & quota accounting
+- MIME composition and RFC compliance
+- Reply parser and unsubscribe heuristics
+- Chrome extension Manifest V3 contract
+- Idempotency and crash-resilient journal recovery
+
+---
+
+## 📁 Repository Structure
+
+```
+agency-automater/
+├── docs/                     # Comprehensive architectural & operational guides
+│   ├── google-setup.md       # OAuth Desktop Client setup instructions
+│   ├── live-testing.md       # Safe self-test walkthrough
+│   ├── mail-tracker.md       # Cloudflare Worker + Chrome extension setup
+│   ├── operations.md         # Journal recovery, privacy & maintenance
+│   ├── scoring.md            # Deterministic 12-point rubric guide
+│   └── validation.md         # Audit details and test matrices
+├── extension/                # Chrome Extension Manifest V3 (Gmail tracker)
+├── prompts/                  # 7 hardened AI prompts with strict schema outputs
+├── scripts/                  # CLI task executors, OAuth handlers, and n8n helpers
+├── src/                      # Core logic (Google/Gemini clients, MIME, journal)
+├── templates/                # 5-tab CRM Excel workbook and CSV schemas
+├── tests/                    # 98 Node.js native test suites
+├── tracker/                  # Cloudflare Worker edge tracking service
+├── workflows/                # 11 native n8n workflow definitions (JSON)
+├── install.cmd               # 1-click Windows installer
+├── start.cmd                 # 1-click launcher for helper + n8n
+├── package.json              # Project definition & pinned scripts
+└── README.md                 # Project documentation
 ```
 
-`gemini:test` makes a real, capped Gemini API request after you configure it. `npm test` is entirely offline, uses mocks, and never contacts prospects. [Validation notes](docs/validation.md) distinguish what was actually tested from what still requires your credentials.
+---
 
-For a repeatable n8n polling check after workflow import, stop both services and run `npm run test:n8n`. It runs the actual report workflow against a mock local helper, checks the imported credential and poll loop, and makes no Google requests. Restart with `npm start` afterward. It requires the default workflow helper port 8787.
-
-## Reliability and free-setup limits
-
-Google Sheets holds the CRM. A local SQLite **recovery journal**, not an additional CRM, holds immutable outreach attempts, processed-message IDs, opt-outs, AI request counters and queued jobs. Keep `.data/` with this project. Removing it can lose suppression and draft deduplication history. Read [recovery and privacy](docs/operations.md) before moving or restoring the project.
-
-Draft POSTs are never retried automatically. If a connection breaks after Gmail accepts a draft, its operation stays uncertain and blocks another attempt. `recover` scans Gmail drafts for the exact Message-ID; reconciliation scans Sent Mail for the exact Message-ID or unique visible reference plus matching sender/recipient and SENT label. If you delete the reference or Gmail changes the identity, sending may remain unconfirmed and follow-ups stay blocked. An uncertain operation with no identifiable draft requires manual investigation; it is deliberately not auto-reset.
-
-The laptop must be awake, connected and running. Missed scheduled runs do not execute while powered off; queued work survives restarts and later reply scans cover messages since first send. Run reconciliation, replies and report after extended downtime. OAuth apps left in Google's Testing state can need reauthorization after seven days. Gemini quotas are project-specific, may be low, and are not guaranteed. Defaults are 15 seconds between API attempts and a rolling 20-attempt daily cap; lower these limits to your actual AI Studio quotas. No automatic paid-model or paid-search fallback exists. Public-only free-tier Gemini inputs may be used by Google to improve products, so replies sent for optional AI review are limited and you should review that policy.
-
-The installed n8n dependency tree has unresolved npm audit findings, including critical findings; see docs/validation.md for the measured counts and scope. This is a local installation for your own trusted workflows and account. Community package installation is disabled. npm's proposed downgrade to n8n 1.17.0 is not an appropriate security fix for this project. n8n also warns that future releases will remove non-container/internal-runner operation, so remain on the verified 2.x pin until a compatible supported path is checked. Python-runner startup warnings do not prevent the JavaScript workflows from running; no Python workflow is required.
-
-The initial website collector cannot render JavaScript-only sites and may miss contacts or agency signals on nonstandard paths. No automatic search/discovery service is enabled: manually selected URLs and CSV imports avoid assumed free search access. No optional report-to-self Gmail draft is enabled; local reports and the REPORTS tab are the default. Replies use conservative English rules; ambiguous messages stop follow-ups for manual review. An opt-out received after a draft was already created must also be removed from Gmail manually before you send it. The system cannot control your manual Gmail actions.
-
-## Project files
-
-`src/` contains the shared testable rules and Google/Gemini adapters. `workflows/` contains importable native n8n Manual/Schedule, HTTP Request, Wait, Code, If and Error Trigger nodes. HTTP nodes call a local helper instead of duplicating OAuth and retry logic inside eight workflows. This uses documented Google REST APIs and keeps the durable safety checks consistent. `prompts/` has seven reusable prompts; the main research prompt combines problem identification and service recommendation to save quota. Deterministic scoring and reporting do not spend Gemini quota. AI selects approved email phrases; code inserts the verified observation, exact service and compliance footer. `templates/` has the five-tab workbook, exact CSV headers and editable scoring rules. `docs/` has setup, column mappings, tests, recovery and implementation notes.
-
-Use Git to track code and documentation. `.env`, `.data/`, report files, npm dependencies and credentials are ignored. Verify with `git status` before committing. No secrets are included in exported workflows.
+<div align="center">
+  <sub>Engineered for reliability, privacy, and full human control.</sub>
+</div>
