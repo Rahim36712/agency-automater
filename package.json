@@ -1,0 +1,38 @@
+{
+  "name": "agency-automation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local, draft-only IT agency acquisition workflows",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "start": "node scripts/start.mjs",
+    "helper": "node src/server.mjs",
+    "auth": "node scripts/oauth.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "crm:check": "node scripts/cli.mjs crm-check",
+    "leads:import": "node scripts/cli.mjs import",
+    "run": "node scripts/cli.mjs run",
+    "gemini:test": "node scripts/cli.mjs gemini-test",
+    "workflows:build": "node scripts/build-workflows.mjs",
+    "workflows:import": "node scripts/import-workflows.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:n8n": "node scripts/smoke-n8n.mjs",
+    "check": "node scripts/check.mjs",
+    "tracking:setup": "node scripts/tracker-setup.mjs",
+    "tracking:build": "node scripts/tracker-build.mjs",
+    "tracking:dev": "node scripts/tracker-dev.mjs",
+    "tracking:deploy": "node scripts/tracker-deploy.mjs",
+    "tracking:crm": "node scripts/tracker-crm.mjs",
+    "test:tracking": "node --test tests/tracker*.test.mjs"
+  },
+  "dependencies": {
+    "n8n": "2.42.6"
+  },
+  "devDependencies": {
+    "jsdom": "23.0.1"
+  }
+}

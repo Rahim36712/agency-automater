@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { config } from '../src/config.mjs';
+import { APPROVED_GEMINI_MODELS,geminiModels } from '../src/gemini.mjs';
+const c=config();let failures=0;
+function check(name,pass,next=''){console.log(`${pass?'OK':'SETUP'}: ${name}${pass?'':'. '+next}`);if(!pass)failures++;}
+check('Node.js 24',Number(process.versions.node.split('.')[0])===24,'Install Node 24 LTS');
+check('n8n installed',fs.existsSync(path.join(c.root,'node_modules/n8n/bin/n8n')),'npm install');
+check('Private helper token',c.token?.length>=32,'npm run setup');
+check('Google OAuth credentials',!!(c.clientId&&c.clientSecret),'Enter them in .env');
+check('Google authorization',fs.existsSync(path.join(c.dataDir,'google-tokens.json')),'npm run auth');
+check('Google Sheets CRM ID',!!c.sheetId,'Upload templates/crm-template.xlsx to Drive, open as Google Sheets, and copy its ID into .env');
+check('Gemini key and confirmed free tier',!!c.geminiKey&&c.freeConfirmed,'Check AI Studio tier, then configure .env');
+check('Approved Gemini model',APPROVED_GEMINI_MODELS.includes(c.model),'Set GEMINI_MODEL to '+APPROVED_GEMINI_MODELS.join(', '));
+if(APPROVED_GEMINI_MODELS.includes(c.model))console.log('INFO: Automatic free-tier fallback: '+geminiModels(c.model).join(' -> '));
+check('Real sender information',!!(c.senderName&&c.senderEmail&&c.businessName&&c.address),'Complete sender fields in .env');
+check('Test mode',c.mode==='test','Production mode is configured; use only reviewed real leads');
+check('Owned test recipient',c.testRecipients.length>0,'Add a second email account you control to TEST_RECIPIENTS');
+if(c.trackingEnabled){check('Optional tracker address and key',!!c.trackingUrl&&/^[a-f0-9]{64}$/.test(c.trackingKey),'Deploy the tracker and configure TRACKING_URL/TRACKING_ADMIN_TOKEN');}else console.log('INFO: Optional agency tracking is disabled; the standalone extension has its own connection settings.');
+console.log('This checks local configuration only; it does not test Google or Gemini APIs.');process.exitCode=failures?1:0;

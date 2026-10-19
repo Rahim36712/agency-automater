@@ -1,0 +1,11 @@
+import { config } from '../src/config.mjs';
+import { Google } from '../src/google.mjs';
+import { TRACKING_HEADERS } from '../tracker/shared.mjs';
+import { column } from '../src/crm.mjs';
+const c=config(),google=new Google(c);if(!/^[a-zA-Z0-9_-]+$/.test(c.sheetId||''))throw Error('Set GOOGLE_SHEET_ID first.');
+const base='/spreadsheets/'+c.sheetId;
+const book=await google.call('sheets',base+'?fields=sheets.properties');
+if(!(book.sheets||[]).some(s=>s.properties.title==='TRACKING'))await google.call('sheets',base+':batchUpdate',{method:'POST',body:{requests:[{addSheet:{properties:{title:'TRACKING',gridProperties:{frozenRowCount:1}}}}]}});
+const range="'TRACKING'!A1:"+column(TRACKING_HEADERS.length-1)+'1',route=base+'/values/'+encodeURIComponent(range),existing=await google.call('sheets',route);
+if(existing.values?.[0]?.length&&JSON.stringify(existing.values[0])!==JSON.stringify(TRACKING_HEADERS))throw Error('Existing TRACKING headers differ. No existing data was overwritten.');
+await google.call('sheets',route+'?valueInputOption=RAW',{method:'PUT',body:{range,values:[TRACKING_HEADERS]}});console.log('Optional TRACKING tab ready. The original five tabs were preserved.');

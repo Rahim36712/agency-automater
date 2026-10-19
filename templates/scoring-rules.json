@@ -1,0 +1,13 @@
+{
+  "A": 9,
+  "B": 5,
+  "dimensions": {
+    "relevance": "0 unknown, 1 adjacent service, 2 exact publicly described service match",
+    "need": "0 speculation only, 1 evidenced possible opportunity, 2 explicit public request for technology or partners",
+    "decisionMaker": "0 unknown, 1 relevant public role/contact, 2 named public decision-maker with matching role",
+    "budget": "0 unknown, 1 documented funding or paid project, 2 explicit suitable budget; never infer from company size",
+    "timing": "0 unknown, 1 dated recent initiative, 2 explicit current deadline or hiring/partner request",
+    "delivery": "0 unconfirmed, 2 founder confirms ability to deliver the specific recommended service"
+  },
+  "notes": "Each non-delivery score needs an exact verified source quote. AI suggestions need Score Reviewed=true before qualification. A draft also needs Contact Verified and Outreach Approved."
+}

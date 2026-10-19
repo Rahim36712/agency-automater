@@ -1,0 +1,17 @@
+# Connect your own Google accounts
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project for this local assistant. Do not enable billing or paid products.
+2. In **APIs & Services > Library**, enable **Gmail API** and **Google Sheets API**. Drive API is not needed by the helper; you upload the workbook manually.
+3. In **Google Auth Platform**, configure Branding (app name and your support/contact email) and Audience. For a personal Gmail account choose External and add your own email as a **test user**. Do not publish for unrelated users during setup.
+4. In Data Access configure these scopes: `https://www.googleapis.com/auth/spreadsheets`, `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.compose`. If consent offers separate checkboxes, grant all three. Compose is the Google scope for managing drafts and also permits sending at the provider level. Our adapter allows only draft creation and never calls sending endpoints.
+5. Create an OAuth client of type **Desktop app**. Copy its client ID and client secret into `.env` locally. The OAuth flow uses a random loopback port, PKCE and a random state; desktop clients support this without a hosted callback or manual redirect configuration. Do not create a Web application client for this helper.
+6. Set `SENDER_EMAIL` to the exact primary Gmail address you authorize. Aliases and delegated/shared mailboxes are not supported by the initial reconciliation logic.
+7. Run `npm run auth`. Open the printed Google URL in your browser, sign into that account, and grant the requested permissions. After consent the local callback confirms completion. Do not share the terminal authorization URL while the flow is pending.
+8. Upload `templates/crm-template.xlsx` to Drive and open/save as native Google Sheets. Keep LEADS, OUTREACH, SUPPRESSION, ACTIVITY LOG and REPORTS unchanged. The spreadsheet ID is between `/d/` and `/edit` in its URL; put only that ID in `GOOGLE_SHEET_ID`.
+9. Fill Gemini and sender settings, start the app, then run `npm run crm:check`. This verifies actual Google access and exact headers. `npm run doctor` only checks local configuration.
+
+Refresh/access tokens are stored in ignored `.data/google-tokens.json`. On Unix files are owner-only; Windows permissions follow the current user's folder ACLs. Keep the project in your own user-controlled directory and restrict access to `.env` and `.data/`. n8n encrypts its credential store using its local config key; back up that key with the n8n database.
+
+Google OAuth apps in **Testing** generally issue refresh tokens that expire after seven days when these scopes are used. If authorization expires or is revoked, run `npm run auth` again. The journal prevents repeating draft POSTs across reauthorization. Move out of Testing only after reviewing Google's publishing/verification requirements for your own account setup. Gmail scopes are restricted; a publicly distributed app has requirements beyond this private laptop installation.
+
+Official references checked on 2026-10-11: [Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [OAuth token expiration](https://developers.google.com/identity/protocols/oauth2#expiration), [Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), [draft creation](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.drafts/create), [Sheets values](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets.values/update).

@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { Store } from '../src/store.mjs';
+import { harness,goodLead,gmailMessage,c,quote,url } from './fixtures.mjs';
+import { DAY,leadId } from '../src/domain.mjs';
+test('initial draft reruns create one Gmail draft and one CRM operation',async t=>{const h=harness(t);await h.engine.run('drafts');await h.engine.run('drafts');assert.equal(h.creates,1);assert.equal(h.crm.tabs.OUTREACH.length,1);assert.equal(h.crm.tabs.OUTREACH[0]['Draft Status'],'draft');assert.equal(h.crm.tabs.OUTREACH[0]['Sent Date'],'');});
+function addApprovedLead(h,number){
+  const lead=goodLead(),website=`https://agency${number}.example`,source=website+'/';
+  Object.assign(lead,{'Lead ID':leadId(website),Website:website,Email:`inbox${number}@owned.example`,'Verified Observations':JSON.stringify([{quote,url:source}]),'Score Inputs':JSON.stringify(Object.fromEntries(['relevance','need','decisionMaker','budget','timing'].map(d=>[d,{points:2,quote,url:source,reason:'Exact public signal'}])))});
+  h.crm.tabs.LEADS.push(lead);h.store.set('evidence:'+lead['Lead ID'],{website,pages:[{url:source,text:quote}]});return lead;
+}
+test('draft batches advance past already drafted leads without exceeding the limit',async t=>{
+  const h=harness(t,null),leads=[1,2,3,4].map(n=>addApprovedLead(h,n));h.engine.c={...c,maxDrafts:2,testRecipients:leads.map(l=>l.Email)};
+  assert.equal((await h.engine.run('drafts')).drafted,2);assert.equal(h.creates,2);
+  assert.equal((await h.engine.run('drafts')).drafted,2);assert.equal(h.creates,4);
+  assert.equal((await h.engine.run('drafts')).drafted,0);assert.equal(h.creates,4);
+  assert.equal(h.crm.tabs.OUTREACH.length,4);
+});
+test('uncertain initial draft stays blocked while the next lead gets its own batch',async t=>{
+  const h=harness(t,null),leads=[1,2].map(n=>addApprovedLead(h,n));h.engine.c={...c,maxDrafts:1,testRecipients:leads.map(l=>l.Email)};let attempts=0;
+  h.google.createDraft=async()=>{attempts++;if(attempts===1)throw Error('Network lost after POST');return {id:'next-draft',message:{id:'next-message',threadId:'next-thread'}};};
+  assert.equal((await h.engine.run('drafts')).drafted,0);assert.equal(h.store.operation(leads[0]['Lead ID']+':0').state,'uncertain');
+  assert.equal((await h.engine.run('drafts')).drafted,1);assert.equal(attempts,2);
+  assert.equal((await h.engine.run('drafts')).drafted,0);assert.equal(attempts,2);
+  assert.equal(h.store.operation(leads[0]['Lead ID']+':0').state,'uncertain');assert.equal(h.store.operation(leads[1]['Lead ID']+':0').state,'draft');
+});
+test('ambiguous Gmail timeout blocks retry and survives restart',async t=>{const h=harness(t);let attempts=0;h.google.createDraft=async()=>{attempts++;throw Error('Network lost after POST');};await h.engine.run('drafts');await h.engine.run('drafts');assert.equal(attempts,1);assert.equal(h.store.operations()[0].state,'uncertain');const op=h.store.operations()[0];const second=new Store(h.dir);assert.equal(second.operation(op.key).state,'uncertain');second.close();});
+test('CRM outage after successful draft cannot cause a second draft',async t=>{const h=harness(t);h.crm.failTab='OUTREACH';await h.engine.run('drafts');h.crm.failTab=null;await h.engine.run('drafts');assert.equal(h.creates,1);assert.equal(h.crm.tabs.OUTREACH.length,1);});
+test('uncertain draft is recovered by Message-ID and recipient',async t=>{const h=harness(t);h.google.createDraft=async()=>{throw Error('Lost response');};await h.engine.run('drafts');const op=h.store.operations()[0];h.drafts=[{id:'recovered',message:gmailMessage({rfc:op.messageId})}];await h.engine.run('recover');assert.equal(h.store.operations()[0].draftId,'recovered');assert.equal(h.crm.tabs.OUTREACH.length,1);});
+test('opt-out persists locally when Sheets fails and blocks reimport',async t=>{const h=harness(t);h.crm.failTab='SUPPRESSION';await assert.rejects(()=>h.engine.processReply(gmailMessage({from:'inbox@owned.example',body:'Please unsubscribe me'}),goodLead()['Lead ID']));assert.equal(h.store.suppression().length,1);h.crm.failTab=null;h.crm.tabs.LEADS=[];await h.engine.import([{Website:'https://new-agency.example',Email:'INBOX@OWNED.EXAMPLE'}]);assert.equal(h.crm.tabs.LEADS[0]['Lead Status'],'suppressed');assert.equal(h.crm.tabs.SUPPRESSION.length,1);});
+test('same Gmail reply cannot create duplicate processing events',async t=>{const h=harness(t);const m=gmailMessage({id:'reply1',from:'inbox@owned.example',body:'We are interested'});await h.engine.processReply(m,goodLead()['Lead ID']);await h.engine.processReply(m,goodLead()['Lead ID']);assert.equal(h.store.events().filter(e=>e.Action==='Interested').length,1);assert.equal(h.store.get('reply-stop:inbox@owned.example'),true);});
+test('manual draft send is reconciled once and scheduled from actual send date',async t=>{const h=harness(t);await h.engine.run('drafts');const op=h.store.operations()[0];h.sent=[gmailMessage({id:'sent1',sent:true,body:'Reference: '+op.reference})];await h.engine.run('reconcile');await h.engine.run('reconcile');const row=h.crm.tabs.OUTREACH[0];assert.equal(row['Draft Status'],'sent');assert.equal(Date.parse(row['Next Follow-up Date'])-Date.parse(row['Sent Date']),4*DAY);assert.equal(h.store.events().filter(e=>e.Action==='sent').length,1);});
+test('draft creation never counts as actually sent',async t=>{const h=harness(t);await h.engine.run('drafts');await h.engine.run('reconcile');assert.equal(h.crm.tabs.OUTREACH[0]['Draft Status'],'draft');assert.equal(h.store.events().filter(e=>e.Action==='sent').length,0);});
+test('follow-up only after actual-send due date; final stage stops',async t=>{const h=harness(t);await h.engine.run('drafts');const op=h.store.operations()[0];op.createdAt=new Date(Date.now()-5*DAY).toISOString();h.store.saveOperation(op);h.sent=[gmailMessage({id:'sent0',sent:true,body:'Reference: '+op.reference,date:Date.now()-4*DAY-1000})];await h.engine.run('followups');assert.equal(h.creates,2);assert.equal(h.store.operations()[1].stage,1);await h.engine.run('followups');assert.equal(h.creates,2);
+  const follow=h.store.operations()[1];follow.createdAt=new Date(Date.now()-8*DAY).toISOString();h.store.saveOperation(follow);h.sent=[gmailMessage({id:'sent0',sent:true,body:'Reference: '+op.reference,date:Date.now()-4*DAY-1000}),gmailMessage({id:'sent1',sent:true,body:'Reference: '+follow.reference,date:Date.now()-7*DAY-1000})];await h.engine.run('followups');assert.equal(h.creates,3);assert.equal(h.store.operations()[2].stage,2);await h.engine.run('followups');assert.equal(h.creates,3);});
+test('every reply including uncertain and out-of-office stops follow-ups',async t=>{const h=harness(t);await h.engine.run('drafts');const op=h.store.operations()[0];op.createdAt=new Date(Date.now()-6*DAY).toISOString();h.store.saveOperation(op);h.sent=[gmailMessage({sent:true,body:'Reference: '+op.reference,date:Date.now()-5*DAY})];h.incoming=[gmailMessage({id:'away',from:'inbox@owned.example',body:'I am out of office'})];await h.engine.run('followups');assert.equal(h.creates,1);assert.equal(h.crm.tabs.OUTREACH[0]['Reply Status'],'Uncertain / manual review');});
+test('tampered quote or service cannot create a draft',async t=>{const h=harness(t);h.crm.tabs.LEADS[0]['Verified Observations']=JSON.stringify([{quote:'invented need for AI transformation',url}]);await h.engine.run('drafts');assert.equal(h.creates,0);});
+test('unapproved lead cannot create a draft',async t=>{const lead=goodLead();lead['Outreach Approved']=false;const h=harness(t,lead);await h.engine.run('drafts');assert.equal(h.creates,0);});
+test('suppression sync failure halts outreach even when CRM status is qualified',async t=>{const h=harness(t);h.store.suppress('inbox@owned.example','Manual opt-out');await h.engine.run('drafts');assert.equal(h.creates,0);});
+test('research stores exact source evidence and resets approvals',async t=>{const lead=goodLead();lead['Lead Status']='new';lead['Research Allowed']=true;const h=harness(t,lead);const result=await h.engine.run('research');assert.equal(result.researched,1);assert.equal(h.crm.tabs.LEADS[0]['Lead Status'],'researched');assert.equal(h.crm.tabs.LEADS[0]['Outreach Approved'],false);assert.ok(h.store.get('evidence:'+lead['Lead ID']));});
+test('CSV duplicate import is safe and does not re-enable approvals',async t=>{const h=harness(t);const result=await h.engine.import([{Website:'https://www.agency.example/contact',Email:'inbox@owned.example'}]);assert.equal(result.added,0);assert.equal(result.duplicates,1);});
+test('qualification stays pending until scores are reviewed',async t=>{const lead=goodLead();lead['Lead Status']='researched';lead['Score Reviewed']=false;const h=harness(t,lead);assert.equal((await h.engine.run('qualify')).qualified,0);h.crm.tabs.LEADS[0]['Score Reviewed']=true;assert.equal((await h.engine.run('qualify')).qualified,1);});

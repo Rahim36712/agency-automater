@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.data/
+.n8n/
+reports/
+backups/
+*.log
+credentials*.json
+client_secret*.json
+tokens*.json
+scratch/

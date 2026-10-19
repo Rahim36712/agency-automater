@@ -1,0 +1,17 @@
+# Versions and official sources
+
+Checked 2026-10-11. `npm view n8n version engines dist-tags --json` returned stable/latest **2.42.6**, next/beta **2.43.3**, and Node **>=24.0.0**. The actual installed Node is **24.15.0**, npm **11.12.1**, Git **2.52.0.windows.1**. `package.json` pins 2.42.6 and `package-lock.json` locks its dependency graph. Do not use unpinned `npx n8n` in this project.
+
+[n8n npm installation](https://docs.n8n.io/deploy/host-n8n/install-options/install-with-npm.md) still documents npm installation, and says it is deprecated from **n8n 3.0**. This project therefore remains on the supported 2.x npm release. Follow the stricter selected package engine rather than the documentation's broader generic Node range. No Docker or tunnel is required for local polling.
+
+[n8n CLI commands](https://docs.n8n.io/deploy/host-n8n/configure-n8n/use-the-command-line.md) document import:workflow, import:credentials and inactive-by-default import. The generator's node types and versions were also checked against the installed `n8n-nodes-base` implementations: HTTP Request 4.2, If 2.2, Schedule Trigger 1.2, Wait 1.1, Code 2, Manual Trigger 1, Error Trigger 1 and Sticky Note 1. Local workflow import and execution outcomes are recorded separately in validation.md.
+
+[Gemini model catalog](https://ai.google.dev/gemini-api/docs/models) lists stable `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`. [Pricing](https://ai.google.dev/gemini-api/docs/pricing) lists their standard text input/output on the free tier, with Google Search grounding unavailable on that tier for these models. No search-grounding tool or paid fallback is configured. Free-tier inputs may be used to improve products. Your actual key's availability still needs a live check.
+
+[Rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) are project-specific and should be read in AI Studio; there is no universal promised free quota. Local throttling applies to every attempt and a rolling 24-hour cap avoids assuming unlimited access. Google's actual daily quota resets in Pacific time, which differs from the local conservative budget.
+
+Availability fallback added 2026-10-13: the configured model can descend through 3.8 Flash, 3.5 Flash-Lite and 3.1 Flash-Lite, whose standard text free tiers were rechecked against [pricing](https://ai.google.dev/gemini-api/docs/pricing). [Troubleshooting](https://ai.google.dev/gemini-api/docs/troubleshooting) documents overload and quota failures; switching can help when another model is available but cannot guarantee unused project quota. No Pro, preview, grounding tool, billing change or new API key is introduced.
+
+[generateContent REST](https://ai.google.dev/api/generate-content) documents POST `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`, API-key authentication, candidate results and output schemas. The current generation configuration uses `responseFormat.text` with `mimeType: APPLICATION_JSON` and JSON Schema; older responseSchema is deprecated. Runtime JSON and evidence validation are still required. [Structured outputs](https://ai.google.dev/gemini-api/docs/structured-output) explains structured formats; no AI output authorizes outreach or supplies verified facts without source checks.
+
+Google OAuth/Gmail/Sheets and FTC references are linked in google-setup.md and operations.md. Billing is not activated or inspected by this code; the founder explicitly confirms an unbilled Free-tier project before enabling calls.

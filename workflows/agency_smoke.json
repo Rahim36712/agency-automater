@@ -1,0 +1,52 @@
+{
+  "id": "agency_smoke",
+  "name": "Agency - Local connection test",
+  "active": false,
+  "nodes": [
+    {
+      "id": "e990db7bb8fb75ba",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "723f6b44f9ea2302",
+      "name": "Helper health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "url": "http://127.0.0.1:8787/health",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "position": [
+        250,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Helper health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "4f249751-6956-4e69-bbb3-35fada41ecf1"
+}

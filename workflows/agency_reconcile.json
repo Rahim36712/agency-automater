@@ -1,0 +1,255 @@
+{
+  "id": "agency_reconcile",
+  "name": "Agency - Sent Mail reconciliation",
+  "nodes": [
+    {
+      "id": "e990db7bb8fb75ba",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "f4830a1dae298044",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 * * * *"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "id": "a486f1ac61ec04df",
+      "name": "Queue local job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8787/jobs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"task\":\"reconcile\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "position": [
+        250,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_HELPER_CREDENTIAL_ID",
+          "name": "Agency Helper"
+        }
+      }
+    },
+    {
+      "id": "ce9307d355907eaf",
+      "name": "Wait before polling",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "id": "ae854b507b3db0e3",
+      "name": "Read job status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:8787/jobs/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "position": [
+        710,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_HELPER_CREDENTIAL_ID",
+          "name": "Agency Helper"
+        }
+      }
+    },
+    {
+      "id": "3059ef8c2574ddba",
+      "name": "Reject failed job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const job = $input.first().json; if (['failed','interrupted'].includes(job.status)) throw new Error(job.result || 'Local job interrupted'); return [{json:job}];"
+      },
+      "position": [
+        940,
+        0
+      ]
+    },
+    {
+      "id": "a94a65ae83b5102d",
+      "name": "Job complete",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "finished",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "complete",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1180,
+        0
+      ]
+    },
+    {
+      "id": "aca66c46a7f08ab5",
+      "name": "Setup note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "Connect the Agency Helper HTTP Header Auth credential to BOTH HTTP nodes. Header name: x-agency-token. Value: HELPER_TOKEN from local .env. Run manually first. All workflows import inactive. Long jobs are queued durably and polled. Google/Gemini credentials are managed by the local helper. No email sending exists.",
+        "height": 260,
+        "width": 440
+      },
+      "position": [
+        220,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Queue local job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Queue local job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue local job": {
+      "main": [
+        [
+          {
+            "node": "Wait before polling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait before polling": {
+      "main": [
+        [
+          {
+            "node": "Read job status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read job status": {
+      "main": [
+        [
+          {
+            "node": "Reject failed job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject failed job": {
+      "main": [
+        [
+          {
+            "node": "Job complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job complete": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait before polling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi",
+    "errorWorkflow": "agency_errors",
+    "executionTimeout": 3600
+  },
+  "pinData": {},
+  "versionId": "02c7a009-77d7-41ba-bd38-4280a42e8860"
+}

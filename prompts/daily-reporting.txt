@@ -1,0 +1,1 @@
+Summarize the supplied computed counts in JSON {"summary":"","actions":[]}. Preserve every count and distinguish drafts awaiting review from emails actually sent. Do not infer sales, meetings booked, revenue or successful delivery. Identify workflow errors and meetings needing human attention. The default daily report is computed locally and uses no Gemini quota.

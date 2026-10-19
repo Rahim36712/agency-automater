@@ -1,0 +1,65 @@
+{
+  "id": "agency_errors",
+  "name": "Agency - G Error monitoring",
+  "active": false,
+  "nodes": [
+    {
+      "id": "e2758f73ceaf8529",
+      "name": "Workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a34c640653e7ef99",
+      "name": "Log local error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8787/errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_HELPER_CREDENTIAL_ID",
+          "name": "Agency Helper"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Workflow error": {
+      "main": [
+        [
+          {
+            "node": "Log local error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "versionId": "46aaac56-d0f5-4d20-83ee-106c2de46067"
+}

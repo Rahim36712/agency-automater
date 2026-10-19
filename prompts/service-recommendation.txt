@@ -1,0 +1,1 @@
+Return JSON {"service":"","reason":"","quote":"","url":"","scopeQuestion":""}. service must be in deliverableServices. Ground the reason in one exact supplied public quote. No speculative diagnosis or claims of guaranteed results. If founder delivery is unknown, make the scopeQuestion ask about scope before committing. No service match means empty strings.
